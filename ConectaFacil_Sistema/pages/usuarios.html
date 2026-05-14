@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Usuários</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">👥 Usuários</div>
+        <div class="page-subtitle">Gerencie os usuários do sistema</div>
+      </div>
+      <button class="btn btn-primary" onclick="abrirModal()">+ Novo Usuário</button>
+    </header>
+    <div class="page-body">
+      <div id="alert-box"></div>
+      <div class="alert alert-warning">🔒 Esta área é exclusiva para administradores. Usuários operadores não têm acesso.</div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><div class="card-title">Usuários Cadastrados</div></div>
+        <div class="card-body">
+          <table>
+            <thead><tr><th>#</th><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Ações</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Novo Usuário</div>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label>Nome Completo *</label>
+        <input class="form-control" id="f-nome" placeholder="Nome do usuário">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Login (usuário) *</label>
+          <input class="form-control" id="f-usuario" placeholder="nome.login">
+        </div>
+        <div class="form-group">
+          <label>Senha *</label>
+          <input class="form-control" id="f-senha" type="password" placeholder="Senha de acesso">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Perfil de Acesso *</label>
+        <select class="form-control" id="f-perfil">
+          <option value="operador">Operador — acesso às locações e consultas</option>
+          <option value="admin">Administrador — acesso total</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  exigirAdmin();
+  renderSidebar('usuarios');
+
+  let editId = null;
+
+  function renderTabela() {
+    const users = getUsuarios();
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td class="text-muted">#${u.id}</td>
+        <td><strong>${u.nome}</strong></td>
+        <td><code style="background:var(--bg);padding:2px 8px;border-radius:4px;font-size:12px">${u.usuario}</code></td>
+        <td>
+          ${u.perfil === 'admin'
+            ? '<span class="badge badge-primary">👑 Administrador</span>'
+            : '<span class="badge badge-muted">👤 Operador</span>'}
+        </td>
+        <td>
+          <div class="flex gap-2">
+            <button class="btn-icon" onclick="abrirModal(${u.id})" title="Editar">✏️</button>
+            ${u.id !== 1 ? `<button class="btn-icon" onclick="excluir(${u.id})" title="Excluir">🗑️</button>` : '<span style="opacity:.3;font-size:12px">protegido</span>'}
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function abrirModal(id) {
+    editId = id || null;
+    document.getElementById('modal-error').style.display = 'none';
+    document.getElementById('modal-title').textContent = id ? 'Editar Usuário' : 'Novo Usuário';
+    if (id) {
+      const u = getUsuarios().find(u => u.id === id);
+      document.getElementById('f-nome').value = u.nome;
+      document.getElementById('f-usuario').value = u.usuario;
+      document.getElementById('f-senha').value = u.senha;
+      document.getElementById('f-perfil').value = u.perfil;
+    } else {
+      ['f-nome','f-usuario','f-senha'].forEach(i => document.getElementById(i).value = '');
+      document.getElementById('f-perfil').value = 'operador';
+    }
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function fecharModal() { document.getElementById('modal').style.display = 'none'; editId = null; }
+
+  function salvar() {
+    const nome = document.getElementById('f-nome').value.trim();
+    const usuario = document.getElementById('f-usuario').value.trim();
+    const senha = document.getElementById('f-senha').value.trim();
+    const perfil = document.getElementById('f-perfil').value;
+    const errEl = document.getElementById('modal-error');
+
+    if (!nome || !usuario || !senha) { errEl.textContent = 'Todos os campos são obrigatórios.'; errEl.style.display='block'; return; }
+    if (senha.length < 4) { errEl.textContent = 'A senha deve ter pelo menos 4 caracteres.'; errEl.style.display='block'; return; }
+
+    const res = salvarUsuario({ id: editId || undefined, nome, usuario, senha, perfil });
+    if (res && res.erro) { errEl.textContent = res.erro; errEl.style.display='block'; return; }
+
+    fecharModal();
+    renderTabela();
+    mostrarAlerta('Usuário salvo com sucesso!', 'success');
+  }
+
+  function excluir(id) {
+    if (!confirm('Deseja excluir este usuário?')) return;
+    const res = excluirUsuario(id);
+    if (res.erro) { mostrarAlerta(res.erro, 'error'); return; }
+    renderTabela();
+    mostrarAlerta('Usuário excluído.', 'success');
+  }
+
+  function mostrarAlerta(msg, tipo) {
+    const el = document.getElementById('alert-box');
+    el.innerHTML = `<div class="alert alert-${tipo==='error'?'error':'success'}">${msg}</div>`;
+    setTimeout(() => el.innerHTML = '', 3500);
+  }
+
+  renderTabela();
+</script>
+</body>
+</html>

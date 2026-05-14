@@ -1,0 +1,103 @@
+============================================================
+  ConectaFácil — Sistema de Locações Tecnológicas v2.0
+  PHP + MySQL
+============================================================
+
+REQUISITOS
+----------
+- PHP 8.0 ou superior
+- MySQL 5.7+ ou MariaDB 10.3+
+- XAMPP, WAMP, Laragon ou similar
+
+============================================================
+INSTALAÇÃO — MÉTODO RÁPIDO (recomendado)
+============================================================
+
+1. Inicie o Apache e o MySQL no XAMPP.
+
+2. Acesse no navegador:
+   http://localhost/ConectaFacil_Sistema/setup.php
+
+   Esse arquivo faz tudo automaticamente:
+   ✓ Cria o banco de dados "conectafacil"
+   ✓ Cria todas as tabelas
+   ✓ Insere usuários com senhas corretas (hash bcrypt)
+   ✓ Insere dispositivos e locação de exemplo
+
+3. Após o setup, acesse o sistema:
+   http://localhost/ConectaFacil_Sistema/
+
+   Credenciais:
+   - Admin:    admin    / admin123
+   - Operador: operador / op123
+
+4. APAGUE o arquivo setup.php após o uso!
+
+============================================================
+INSTALAÇÃO — MÉTODO MANUAL
+============================================================
+
+1. Abra o phpMyAdmin (http://localhost/phpmyadmin)
+2. Importe o arquivo banco.sql
+3. Acesse: http://localhost/ConectaFacil_Sistema/gerar_senhas.php
+   para gerar os hashes corretos das senhas
+4. Apague gerar_senhas.php após o uso
+
+Se precisar alterar usuário/senha do MySQL:
+  Edite: config/db.php
+  Linhas: DB_USER e DB_PASS
+
+============================================================
+ESTRUTURA DE ARQUIVOS
+============================================================
+
+ConectaFacil_Sistema/
+├── index.php              ← Login (PHP)
+├── index.html             ← Redireciona para index.php
+├── logout.php             ← Encerra sessão
+├── setup.php              ← Setup automático (apagar após uso)
+├── gerar_senhas.php       ← Corrige senhas (apagar após uso)
+├── banco.sql              ← Script SQL manual
+├── LEIA-ME.txt            ← Este arquivo
+│
+├── config/
+│   └── db.php             ← Conexão PDO com MySQL
+│
+├── includes/
+│   ├── auth.php           ← Autenticação por sessão PHP
+│   └── helpers.php        ← Funções auxiliares + sidebar
+│
+├── api/                   ← Endpoints AJAX (retornam JSON)
+│   ├── dashboard.php
+│   ├── dispositivos.php
+│   ├── locacoes.php
+│   ├── usuarios.php
+│   └── relatorios.php
+│
+├── pages/                 ← Páginas do sistema
+│   ├── dashboard.php
+│   ├── locacoes.php
+│   ├── devolucoes.php
+│   ├── dispositivos.php
+│   ├── usuarios.php
+│   ├── consulta.php
+│   └── relatorios.php
+│
+├── css/
+│   └── style.css          ← Estilos globais
+│
+└── js/
+    ├── auth.js            ← (versão HTML legada)
+    └── data.js            ← (versão HTML legada)
+
+============================================================
+SEGURANÇA
+============================================================
+
+- Senhas com hash bcrypt (password_hash / password_verify)
+- Sessões PHP para autenticação
+- PDO com prepared statements (proteção SQL Injection)
+- Verificação de perfil (admin/operador) em cada rota
+- htmlspecialchars() em todas as saídas HTML
+
+============================================================

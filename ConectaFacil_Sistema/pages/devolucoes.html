@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Devoluções</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">↩️ Devoluções</div>
+        <div class="page-subtitle">Registre a devolução de aparelhos</div>
+      </div>
+    </header>
+    <div class="page-body">
+      <div id="alert-box"></div>
+      <div class="grid-2">
+        <!-- Lista de locações ativas -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Locações Ativas</div>
+            <input class="search-input" style="width:160px" id="busca" placeholder="Buscar..." oninput="renderLista()">
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="lista-locacoes"></div>
+          </div>
+        </div>
+
+        <!-- Formulário de devolução -->
+        <div class="card" id="card-form" style="display:none">
+          <div class="card-header">
+            <div class="card-title" id="form-title">Registrar Devolução</div>
+          </div>
+          <div class="card-body">
+            <div id="form-error" class="alert alert-error" style="display:none"></div>
+            <div id="info-locacao" style="margin-bottom:20px; padding:16px; background:var(--bg); border-radius:10px; border:1px solid var(--border)"></div>
+            <div class="form-group">
+              <label>Data de Devolução *</label>
+              <input class="form-control" id="f-data-dev" type="date" onchange="calcularPreview()">
+            </div>
+            <div class="form-group">
+              <label>Danos no Aparelho</label>
+              <textarea class="form-control" id="f-danos" rows="3" placeholder="Descreva os danos (deixe em branco se não houver)..." oninput="calcularPreview()"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Multa por Dano (R$)</label>
+              <input class="form-control" id="f-multa" type="number" min="0" step="0.01" placeholder="0,00" oninput="calcularPreview()">
+            </div>
+            <div id="preview-calculo" class="alert alert-warning" style="display:none"></div>
+            <div class="modal-footer" style="padding:0;margin-top:16px">
+              <button class="btn btn-ghost" onclick="fecharForm()">Cancelar</button>
+              <button class="btn btn-success" onclick="confirmarDevolucao()">✓ Confirmar Devolução</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="card-vazio" style="display:flex;align-items:center;justify-content:center">
+          <div class="empty-state">
+            <div class="empty-icon">↩️</div>
+            <p>Selecione uma locação ativa à esquerda para registrar a devolução</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  exigirLogin();
+  renderSidebar('devolucoes');
+
+  let locacaoSelecionadaId = null;
+
+  // Verifica se veio com parâmetro ?id=
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramId = urlParams.get('id');
+
+  function renderLista() {
+    const busca = document.getElementById('busca').value.toLowerCase();
+    const hoje = hojeISO();
+    let locs = getLocacoes().filter(l => l.status === 'ativa');
+    if (busca) locs = locs.filter(l =>
+      l.clienteNome.toLowerCase().includes(busca) ||
+      (getDispositivoPorId(l.dispositivoId)?.modelo || '').toLowerCase().includes(busca)
+    );
+
+    const el = document.getElementById('lista-locacoes');
+    if (locs.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nenhuma locação ativa</p></div>';
+      return;
+    }
+
+    el.innerHTML = locs.map(l => {
+      const disp = getDispositivoPorId(l.dispositivoId);
+      const atrasado = l.dataFimPrevista < hoje;
+      const sel = l.id === locacaoSelecionadaId;
+      return `
+        <div onclick="selecionarLocacao(${l.id})" style="padding:14px 20px; cursor:pointer; border-bottom:1px solid var(--border); background:${sel?'var(--primary-light)':'white'}; transition:background 0.1s">
+          <div class="flex justify-between items-center">
+            <div>
+              <div class="font-bold" style="font-size:13px">${l.clienteNome}</div>
+              <div class="text-muted text-sm">${disp ? disp.modelo : '—'}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px; color:${atrasado?'var(--danger)':'var(--text-muted)'}">
+                ${atrasado ? '⚠️ Atrasado' : 'Previsto'}<br>${formatarData(l.dataFimPrevista)}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function selecionarLocacao(id) {
+    locacaoSelecionadaId = id;
+    renderLista();
+
+    const l = getLocacaoPorId(id);
+    const disp = getDispositivoPorId(l.dispositivoId);
+    const dias = Math.max(1, Math.ceil((new Date(l.dataFimPrevista) - new Date(l.dataInicio)) / (1000*60*60*24)));
+
+    document.getElementById('info-locacao').innerHTML = `
+      <div class="grid-2" style="gap:8px">
+        <div><div class="text-muted text-sm">Cliente</div><strong>${l.clienteNome}</strong></div>
+        <div><div class="text-muted text-sm">Dispositivo</div><strong>${disp ? disp.modelo : '—'}</strong></div>
+        <div><div class="text-muted text-sm">Início</div>${formatarData(l.dataInicio)}</div>
+        <div><div class="text-muted text-sm">Devolução prevista</div>${formatarData(l.dataFimPrevista)}</div>
+        <div><div class="text-muted text-sm">Diária</div>${formatarMoeda(l.valorDiaria)}</div>
+        <div><div class="text-muted text-sm">Estimativa (${dias} dias)</div><strong>${formatarMoeda(dias * l.valorDiaria)}</strong></div>
+      </div>
+    `;
+
+    document.getElementById('f-data-dev').value = hojeISO();
+    document.getElementById('f-danos').value = '';
+    document.getElementById('f-multa').value = '';
+    document.getElementById('preview-calculo').style.display = 'none';
+    document.getElementById('form-error').style.display = 'none';
+
+    document.getElementById('card-vazio').style.display = 'none';
+    document.getElementById('card-form').style.display = 'block';
+    calcularPreview();
+  }
+
+  function calcularPreview() {
+    if (!locacaoSelecionadaId) return;
+    const l = getLocacaoPorId(locacaoSelecionadaId);
+    const dataFim = document.getElementById('f-data-dev').value;
+    const multaDano = parseFloat(document.getElementById('f-multa').value) || 0;
+    const prev = document.getElementById('preview-calculo');
+
+    if (!dataFim) { prev.style.display = 'none'; return; }
+
+    const inicio = new Date(l.dataInicio);
+    const fim = new Date(dataFim);
+    const dias = Math.max(1, Math.ceil((fim - inicio) / (1000*60*60*24)));
+    const valorBase = dias * l.valorDiaria;
+    const multaAtraso = calcularMultaAtraso(l.dataFimPrevista, dataFim, l.valorDiaria);
+    const total = valorBase + multaAtraso + multaDano;
+
+    let html = `<strong>💰 Cálculo de Valores:</strong><br>`;
+    html += `${dias} dia${dias>1?'s':''} × ${formatarMoeda(l.valorDiaria)} = ${formatarMoeda(valorBase)}<br>`;
+    if (multaAtraso > 0) html += `⚠️ Multa de atraso: +${formatarMoeda(multaAtraso)}<br>`;
+    if (multaDano > 0) html += `🔧 Multa por dano: +${formatarMoeda(multaDano)}<br>`;
+    html += `<strong>Total: ${formatarMoeda(total)}</strong>`;
+
+    prev.innerHTML = html;
+    prev.style.display = 'block';
+  }
+
+  function fecharForm() {
+    locacaoSelecionadaId = null;
+    renderLista();
+    document.getElementById('card-form').style.display = 'none';
+    document.getElementById('card-vazio').style.display = 'flex';
+  }
+
+  function confirmarDevolucao() {
+    const dataFim = document.getElementById('f-data-dev').value;
+    const danos = document.getElementById('f-danos').value.trim();
+    const multa = parseFloat(document.getElementById('f-multa').value) || 0;
+    const errEl = document.getElementById('form-error');
+
+    if (!dataFim) { errEl.textContent = 'Informe a data de devolução.'; errEl.style.display='block'; return; }
+    const l = getLocacaoPorId(locacaoSelecionadaId);
+    if (dataFim < l.dataInicio) { errEl.textContent = 'Data de devolução não pode ser antes do início.'; errEl.style.display='block'; return; }
+
+    const res = devolverLocacao(locacaoSelecionadaId, { dataFimReal: dataFim, danos, multaDano: multa });
+    if (res.erro) { errEl.textContent = res.erro; errEl.style.display='block'; return; }
+
+    mostrarAlerta(`Devolução registrada! Valor total: ${formatarMoeda(res.locacao.valorTotal)}`, 'success');
+    fecharForm();
+  }
+
+  function mostrarAlerta(msg, tipo) {
+    const el = document.getElementById('alert-box');
+    el.innerHTML = `<div class="alert alert-${tipo==='error'?'error':'success'}">${msg}</div>`;
+    setTimeout(() => el.innerHTML = '', 5000);
+  }
+
+  renderLista();
+  if (paramId) {
+    setTimeout(() => selecionarLocacao(parseInt(paramId)), 100);
+  }
+</script>
+</body>
+</html>

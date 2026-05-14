@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Consultar Aparelhos</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">🔍 Consultar Aparelhos</div>
+        <div class="page-subtitle">Veja a disponibilidade de todos os dispositivos</div>
+      </div>
+    </header>
+    <div class="page-body">
+
+      <!-- Filtros + cards -->
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-body">
+          <div class="flex gap-3 items-center" style="flex-wrap:wrap">
+            <input class="search-input" style="flex:1;min-width:200px" id="busca" placeholder="Buscar modelo ou marca..." oninput="renderCards()">
+            <button class="btn btn-sm btn-primary" onclick="filtro='';renderCards();setFiltro(this)">Todos</button>
+            <button class="btn btn-sm btn-ghost" onclick="filtro='disponivel';renderCards();setFiltro(this)">✓ Disponíveis</button>
+            <button class="btn btn-sm btn-ghost" onclick="filtro='locado';renderCards();setFiltro(this)">⏳ Locados</button>
+            <button class="btn btn-sm btn-ghost" onclick="filtro='manutencao';renderCards();setFiltro(this)">🔧 Manutenção</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cards-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px"></div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  exigirLogin();
+  renderSidebar('consulta');
+
+  let filtro = '';
+
+  function setFiltro(btn) {
+    document.querySelectorAll('.btn-sm').forEach(b => b.classList.remove('btn-primary'));
+    document.querySelectorAll('.btn-sm').forEach(b => b.classList.add('btn-ghost'));
+    btn.classList.remove('btn-ghost');
+    btn.classList.add('btn-primary');
+  }
+
+  function renderCards() {
+    const busca = document.getElementById('busca').value.toLowerCase();
+    let disps = getDispositivos();
+    if (busca) disps = disps.filter(d =>
+      d.modelo.toLowerCase().includes(busca) ||
+      d.marca.toLowerCase().includes(busca)
+    );
+    if (filtro) disps = disps.filter(d => d.status === filtro);
+
+    const grid = document.getElementById('cards-grid');
+    if (disps.length === 0) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📭</div><p>Nenhum aparelho encontrado</p></div>';
+      return;
+    }
+
+    const locs = getLocacoes().filter(l => l.status === 'ativa');
+
+    grid.innerHTML = disps.map(d => {
+      const locAtiva = locs.find(l => l.dispositivoId === d.id);
+      const statusColors = {
+        disponivel: { bg: '#E6F9F0', color: '#00864A', icon: '✓' },
+        locado: { bg: '#FEF3C7', color: '#92600A', icon: '⏳' },
+        manutencao: { bg: '#FEE2E2', color: '#B91C1C', icon: '🔧' }
+      };
+      const sc = statusColors[d.status] || statusColors.manutencao;
+
+      let infoExtra = '';
+      if (locAtiva) {
+        infoExtra = `
+          <div style="margin-top:12px; padding:10px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border); font-size:12px">
+            <div class="text-muted">Locado para:</div>
+            <div class="font-bold">${locAtiva.clienteNome}</div>
+            <div class="text-muted">Devolução: ${formatarData(locAtiva.dataFimPrevista)}</div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="card" style="overflow:hidden">
+          <div style="height:6px; background:${sc.bg}; border-bottom:2px solid ${sc.color}22"></div>
+          <div class="card-body">
+            <div class="flex justify-between items-center" style="margin-bottom:10px">
+              <div>
+                <div style="font-family:'Syne',sans-serif; font-weight:700; font-size:15px">${d.modelo}</div>
+                <div class="text-muted text-sm">${d.marca}</div>
+              </div>
+              <span style="background:${sc.bg}; color:${sc.color}; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700">${sc.icon} ${d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span>
+            </div>
+            <div class="grid-2" style="gap:6px; font-size:12px; margin-bottom:12px">
+              <div><span class="text-muted">Cor:</span> ${d.cor || '—'}</div>
+              <div><span class="text-muted">Storage:</span> ${d.armazenamento || '—'}</div>
+              ${d.imei ? `<div style="grid-column:1/-1"><span class="text-muted">IMEI:</span> ${d.imei}</div>` : ''}
+            </div>
+            <div style="font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--primary)">
+              ${formatarMoeda(d.diaria)}<span style="font-size:13px; font-weight:400; color:var(--text-muted)">/dia</span>
+            </div>
+            ${infoExtra}
+            ${d.status === 'disponivel' ? `<a href="locacoes.html" class="btn btn-primary btn-full" style="margin-top:14px; font-size:12px">+ Criar Locação</a>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  renderCards();
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Relatórios</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">📊 Relatórios</div>
+        <div class="page-subtitle">Análise financeira e operacional</div>
+      </div>
+      <button class="btn btn-ghost" onclick="window.print()">🖨️ Imprimir</button>
+    </header>
+    <div class="page-body">
+
+      <!-- Período -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-body">
+          <div class="flex gap-3 items-center" style="flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+              <label>Período — De</label>
+              <input class="form-control" type="date" id="f-de" style="width:160px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Até</label>
+              <input class="form-control" type="date" id="f-ate" style="width:160px">
+            </div>
+            <div style="margin-top:20px">
+              <button class="btn btn-primary" onclick="gerarRelatorio()">Gerar Relatório</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="stats-grid" id="kpis" style="margin-bottom:20px"></div>
+
+      <div class="grid-2">
+        <!-- Locações no período -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Locações Concluídas</div></div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Cliente</th><th>Aparelho</th><th>Dias</th><th>Total</th></tr></thead>
+                <tbody id="tbl-concluidas"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ranking aparelhos -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Aparelhos Mais Locados</div></div>
+          <div class="card-body">
+            <div id="ranking-aparelhos"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  exigirAdmin();
+  renderSidebar('relatorios');
+
+  // Define período padrão: mês atual
+  const hoje = hojeISO();
+  document.getElementById('f-ate').value = hoje;
+  document.getElementById('f-de').value = hoje.substring(0,7) + '-01';
+
+  function gerarRelatorio() {
+    const de = document.getElementById('f-de').value;
+    const ate = document.getElementById('f-ate').value;
+
+    let locs = getLocacoes();
+    let locsPeriodo = locs.filter(l => {
+      const ref = l.dataFimReal || l.dataInicio;
+      return ref >= de && ref <= ate;
+    });
+    let locsConcluidas = locsPeriodo.filter(l => l.status === 'concluida');
+
+    const receita = locsConcluidas.reduce((s,l) => s + (l.valorTotal || 0), 0);
+    const multas = locsConcluidas.reduce((s,l) => s + (l.multaAtraso || 0) + (l.multaDano || 0), 0);
+    const ticket = locsConcluidas.length > 0 ? receita / locsConcluidas.length : 0;
+    const ativas = locs.filter(l => l.status === 'ativa').length;
+
+    document.getElementById('kpis').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#E8F0FF">💰</div>
+        <div><div class="stat-value" style="color:var(--primary);font-size:18px">${formatarMoeda(receita)}</div><div class="stat-label">Receita no período</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#FEE2E2">⚠️</div>
+        <div><div class="stat-value" style="color:var(--danger);font-size:18px">${formatarMoeda(multas)}</div><div class="stat-label">Total em multas</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#E6F9F0">📋</div>
+        <div><div class="stat-value" style="color:var(--success)">${locsConcluidas.length}</div><div class="stat-label">Locações concluídas</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#FEF3C7">🎟️</div>
+        <div><div class="stat-value" style="color:var(--warning);font-size:18px">${formatarMoeda(ticket)}</div><div class="stat-label">Ticket médio</div></div>
+      </div>
+    `;
+
+    // Tabela concluídas
+    const tbody = document.getElementById('tbl-concluidas');
+    if (locsConcluidas.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:30px">Nenhuma locação concluída no período</td></tr>';
+    } else {
+      tbody.innerHTML = locsConcluidas.slice().reverse().map(l => {
+        const disp = getDispositivoPorId(l.dispositivoId);
+        const dias = Math.max(1, Math.ceil((new Date(l.dataFimReal) - new Date(l.dataInicio)) / (1000*60*60*24)));
+        return `<tr>
+          <td>${l.clienteNome}</td>
+          <td>${disp ? disp.modelo : '—'}</td>
+          <td>${dias}</td>
+          <td><strong>${formatarMoeda(l.valorTotal)}</strong></td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Ranking
+    const contagem = {};
+    locs.forEach(l => {
+      const disp = getDispositivoPorId(l.dispositivoId);
+      if (!disp) return;
+      const key = disp.modelo;
+      contagem[key] = (contagem[key] || 0) + 1;
+    });
+    const ranking = Object.entries(contagem).sort((a,b) => b[1]-a[1]).slice(0,5);
+    const maxVal = ranking[0]?.[1] || 1;
+    document.getElementById('ranking-aparelhos').innerHTML = ranking.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">📊</div><p>Sem dados</p></div>'
+      : ranking.map(([nome, qtd], i) => `
+        <div style="margin-bottom:14px">
+          <div class="flex justify-between" style="margin-bottom:4px">
+            <span style="font-size:13px;font-weight:600">${i+1}. ${nome}</span>
+            <span class="text-muted text-sm">${qtd} locação${qtd>1?'ões':''}</span>
+          </div>
+          <div style="height:6px;background:var(--bg);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${(qtd/maxVal*100)}%;background:var(--primary);border-radius:4px;transition:width 0.5s"></div>
+          </div>
+        </div>
+      `).join('');
+  }
+
+  gerarRelatorio();
+</script>
+</body>
+</html>

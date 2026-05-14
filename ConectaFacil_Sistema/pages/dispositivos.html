@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Dispositivos</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">📱 Dispositivos</div>
+        <div class="page-subtitle">Gerencie o cadastro de aparelhos</div>
+      </div>
+      <button class="btn btn-primary" onclick="abrirModal()">+ Novo Dispositivo</button>
+    </header>
+    <div class="page-body">
+      <div id="alert-box"></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Todos os Dispositivos</div>
+          <div class="search-bar" style="margin:0">
+            <input class="search-input" style="min-width:220px" id="busca" placeholder="Buscar modelo, marca..." oninput="renderTabela()">
+            <select class="form-control" style="width:140px" id="filtro-status" onchange="renderTabela()">
+              <option value="">Todos status</option>
+              <option value="disponivel">Disponível</option>
+              <option value="locado">Locado</option>
+              <option value="manutencao">Manutenção</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Modelo</th>
+                  <th>Marca</th>
+                  <th>Cor / Armazenamento</th>
+                  <th>Diária</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Novo Dispositivo</div>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Modelo *</label>
+          <input class="form-control" id="f-modelo" placeholder="Ex: Galaxy S23">
+        </div>
+        <div class="form-group">
+          <label>Marca *</label>
+          <input class="form-control" id="f-marca" placeholder="Ex: Samsung">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Cor</label>
+          <input class="form-control" id="f-cor" placeholder="Ex: Preto">
+        </div>
+        <div class="form-group">
+          <label>Armazenamento</label>
+          <input class="form-control" id="f-armazenamento" placeholder="Ex: 128GB">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Valor da Diária (R$) *</label>
+          <input class="form-control" id="f-diaria" type="number" min="0" step="0.01" placeholder="0,00">
+        </div>
+        <div class="form-group">
+          <label>Status *</label>
+          <select class="form-control" id="f-status">
+            <option value="disponivel">Disponível</option>
+            <option value="manutencao">Manutenção</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>IMEI</label>
+        <input class="form-control" id="f-imei" placeholder="IMEI do dispositivo">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  exigirAdmin();
+  renderSidebar('dispositivos');
+
+  let editId = null;
+
+  function renderTabela() {
+    const busca = document.getElementById('busca').value.toLowerCase();
+    const filtro = document.getElementById('filtro-status').value;
+    let disps = getDispositivos();
+
+    if (busca) disps = disps.filter(d =>
+      d.modelo.toLowerCase().includes(busca) || d.marca.toLowerCase().includes(busca)
+    );
+    if (filtro) disps = disps.filter(d => d.status === filtro);
+
+    const tbody = document.getElementById('tbody');
+    if (disps.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📭</div><p>Nenhum dispositivo encontrado</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = disps.map(d => `
+      <tr>
+        <td class="text-muted">#${d.id}</td>
+        <td><strong>${d.modelo}</strong></td>
+        <td>${d.marca}</td>
+        <td class="text-muted">${d.cor || '—'} / ${d.armazenamento || '—'}</td>
+        <td>${formatarMoeda(d.diaria)}</td>
+        <td>${statusDispositivoBadge(d.status)}</td>
+        <td>
+          <div class="flex gap-2">
+            <button class="btn-icon" onclick="abrirModal(${d.id})" title="Editar">✏️</button>
+            <button class="btn-icon" onclick="excluir(${d.id})" title="Excluir">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function abrirModal(id) {
+    editId = id || null;
+    const errEl = document.getElementById('modal-error');
+    errEl.style.display = 'none';
+    document.getElementById('modal-title').textContent = id ? 'Editar Dispositivo' : 'Novo Dispositivo';
+
+    if (id) {
+      const d = getDispositivoPorId(id);
+      document.getElementById('f-modelo').value = d.modelo;
+      document.getElementById('f-marca').value = d.marca;
+      document.getElementById('f-cor').value = d.cor || '';
+      document.getElementById('f-armazenamento').value = d.armazenamento || '';
+      document.getElementById('f-diaria').value = d.diaria;
+      document.getElementById('f-status').value = d.status;
+      document.getElementById('f-imei').value = d.imei || '';
+    } else {
+      ['f-modelo','f-marca','f-cor','f-armazenamento','f-imei'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('f-diaria').value = '';
+      document.getElementById('f-status').value = 'disponivel';
+    }
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function fecharModal() {
+    document.getElementById('modal').style.display = 'none';
+    editId = null;
+  }
+
+  function salvar() {
+    const modelo = document.getElementById('f-modelo').value.trim();
+    const marca = document.getElementById('f-marca').value.trim();
+    const diaria = parseFloat(document.getElementById('f-diaria').value);
+    const status = document.getElementById('f-status').value;
+    const errEl = document.getElementById('modal-error');
+
+    if (!modelo || !marca) { errEl.textContent = 'Modelo e marca são obrigatórios.'; errEl.style.display='block'; return; }
+    if (!diaria || diaria <= 0) { errEl.textContent = 'Informe um valor de diária válido.'; errEl.style.display='block'; return; }
+
+    const dispositivo = {
+      modelo, marca, diaria, status,
+      cor: document.getElementById('f-cor').value.trim(),
+      armazenamento: document.getElementById('f-armazenamento').value.trim(),
+      imei: document.getElementById('f-imei').value.trim(),
+    };
+    if (editId) dispositivo.id = editId;
+
+    salvarDispositivo(dispositivo);
+    fecharModal();
+    renderTabela();
+    mostrarAlerta('Dispositivo salvo com sucesso!', 'success');
+  }
+
+  function excluir(id) {
+    if (!confirm('Deseja realmente excluir este dispositivo?')) return;
+    const res = excluirDispositivo(id);
+    if (res.erro) { mostrarAlerta(res.erro, 'error'); return; }
+    renderTabela();
+    mostrarAlerta('Dispositivo excluído.', 'success');
+  }
+
+  function mostrarAlerta(msg, tipo) {
+    const el = document.getElementById('alert-box');
+    el.innerHTML = `<div class="alert alert-${tipo === 'error' ? 'error' : 'success'}">${msg}</div>`;
+    setTimeout(() => { el.innerHTML = ''; }, 3500);
+  }
+
+  renderTabela();
+</script>
+</body>
+</html>

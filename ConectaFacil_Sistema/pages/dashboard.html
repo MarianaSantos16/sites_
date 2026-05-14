@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">Dashboard</div>
+        <div class="page-subtitle" id="data-hora"></div>
+      </div>
+    </header>
+    <div class="page-body">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 Locações Ativas</div>
+            <a href="locacoes.html" class="btn btn-sm btn-ghost">Ver todas</a>
+          </div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table id="tbl-locacoes-ativas">
+                <thead><tr><th>Cliente</th><th>Aparelho</th><th>Devolução</th><th>Status</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📱 Aparelhos Disponíveis</div>
+            <a href="consulta.html" class="btn btn-sm btn-ghost">Ver todos</a>
+          </div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table id="tbl-disponiveis">
+                <thead><tr><th>Modelo</th><th>Marca</th><th>Diária</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  const user = exigirLogin();
+  renderSidebar('dashboard');
+
+  // Data/hora
+  function atualizarHora() {
+    const now = new Date();
+    document.getElementById('data-hora').textContent =
+      now.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'}) +
+      ' — ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  }
+  atualizarHora();
+  setInterval(atualizarHora, 10000);
+
+  // Stats
+  const disps = getDispositivos();
+  const locs = getLocacoes();
+  const hoje = hojeISO();
+
+  const disponiveis = disps.filter(d => d.status==='disponivel').length;
+  const locados = disps.filter(d => d.status==='locado').length;
+  const manutencao = disps.filter(d => d.status==='manutencao').length;
+  const ativas = locs.filter(l => l.status==='ativa').length;
+  const vencendo = locs.filter(l => l.status==='ativa' && l.dataFimPrevista <= hoje).length;
+  const receitaMes = locs.filter(l => l.status==='concluida' && l.dataFimReal && l.dataFimReal.startsWith(hoje.substring(0,7)))
+    .reduce((s, l) => s + (l.valorTotal || 0), 0);
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#E8F0FF">📱</div>
+      <div>
+        <div class="stat-value" style="color:var(--primary)">${disponiveis}</div>
+        <div class="stat-label">Disponíveis</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#FEF3C7">⏳</div>
+      <div>
+        <div class="stat-value" style="color:var(--warning)">${locados}</div>
+        <div class="stat-label">Locados</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#FEE2E2">🔧</div>
+      <div>
+        <div class="stat-value" style="color:var(--danger)">${manutencao}</div>
+        <div class="stat-label">Em Manutenção</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#E6F9F0">💰</div>
+      <div>
+        <div class="stat-value" style="color:var(--success); font-size:18px">${formatarMoeda(receitaMes)}</div>
+        <div class="stat-label">Receita do mês</div>
+      </div>
+    </div>
+  `;
+
+  // Locações ativas
+  const locsAtivas = locs.filter(l => l.status==='ativa').slice(0,6);
+  const tbodyLoc = document.querySelector('#tbl-locacoes-ativas tbody');
+  if (locsAtivas.length === 0) {
+    tbodyLoc.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:30px">Nenhuma locação ativa</td></tr>';
+  } else {
+    tbodyLoc.innerHTML = locsAtivas.map(l => {
+      const disp = getDispositivoPorId(l.dispositivoId);
+      const atrasado = l.dataFimPrevista < hoje;
+      return `<tr>
+        <td>${l.clienteNome}</td>
+        <td>${disp ? disp.modelo : '—'}</td>
+        <td style="color:${atrasado?'var(--danger)':'inherit'}">${formatarData(l.dataFimPrevista)}${atrasado?' ⚠️':''}</td>
+        <td>${statusLocacaoBadge(l.status)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Disponíveis
+  const dispsDisp = disps.filter(d => d.status==='disponivel').slice(0,6);
+  const tbodyDisp = document.querySelector('#tbl-disponiveis tbody');
+  if (dispsDisp.length === 0) {
+    tbodyDisp.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:30px">Nenhum aparelho disponível</td></tr>';
+  } else {
+    tbodyDisp.innerHTML = dispsDisp.map(d => `
+      <tr>
+        <td><strong>${d.modelo}</strong></td>
+        <td>${d.marca}</td>
+        <td>${formatarMoeda(d.diaria)}/dia</td>
+      </tr>
+    `).join('');
+  }
+</script>
+</body>
+</html>

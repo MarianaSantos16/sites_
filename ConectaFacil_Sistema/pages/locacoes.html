@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConectaFácil — Locações</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content">
+    <header class="page-header">
+      <div>
+        <div class="page-title">📋 Locações</div>
+        <div class="page-subtitle">Registre e acompanhe as locações</div>
+      </div>
+      <button class="btn btn-primary" onclick="abrirModal()">+ Nova Locação</button>
+    </header>
+    <div class="page-body">
+      <div id="alert-box"></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Todas as Locações</div>
+          <div class="flex gap-2">
+            <input class="search-input" style="width:200px" id="busca" placeholder="Buscar cliente..." oninput="renderTabela()">
+            <select class="form-control" style="width:130px" id="filtro" onchange="renderTabela()">
+              <option value="">Todos</option>
+              <option value="ativa">Ativas</option>
+              <option value="concluida">Concluídas</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Cliente</th>
+                  <th>Aparelho</th>
+                  <th>Início</th>
+                  <th>Devolução Prev.</th>
+                  <th>Valor Est.</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nova Locação -->
+<div class="modal-overlay" id="modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Nova Locação</div>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-error" class="alert alert-error" style="display:none"></div>
+
+      <div class="form-group">
+        <label>Nome do Cliente *</label>
+        <input class="form-control" id="f-nome" placeholder="Nome ou Razão Social">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>CPF / CNPJ *</label>
+          <input class="form-control" id="f-doc" placeholder="000.000.000-00">
+        </div>
+        <div class="form-group">
+          <label>Telefone *</label>
+          <input class="form-control" id="f-tel" placeholder="(00) 00000-0000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Dispositivo *</label>
+        <select class="form-control" id="f-disp" onchange="atualizarPreview()">
+          <option value="">— Selecione um aparelho disponível —</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Data de Início *</label>
+          <input class="form-control" id="f-inicio" type="date" onchange="atualizarPreview()">
+        </div>
+        <div class="form-group">
+          <label>Data de Devolução Prevista *</label>
+          <input class="form-control" id="f-fim" type="date" onchange="atualizarPreview()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Observações</label>
+        <textarea class="form-control" id="f-obs" rows="2" placeholder="Informações adicionais..."></textarea>
+      </div>
+      <div class="alert alert-warning" id="preview-valor" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvar()">Registrar Locação</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detalhe -->
+<div class="modal-overlay" id="modal-detalhe" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Detalhes da Locação</div>
+      <button class="modal-close" onclick="fecharDetalhe()">✕</button>
+    </div>
+    <div class="modal-body" id="detalhe-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharDetalhe()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  exigirLogin();
+  renderSidebar('locacoes');
+
+  function renderTabela() {
+    const busca = document.getElementById('busca').value.toLowerCase();
+    const filtro = document.getElementById('filtro').value;
+    let locs = getLocacoes();
+    if (busca) locs = locs.filter(l => l.clienteNome.toLowerCase().includes(busca) || l.clienteCPFCNPJ.includes(busca));
+    if (filtro) locs = locs.filter(l => l.status === filtro);
+    locs = locs.slice().reverse();
+
+    const hoje = hojeISO();
+    const tbody = document.getElementById('tbody');
+    if (locs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📭</div><p>Nenhuma locação encontrada</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = locs.map(l => {
+      const disp = getDispositivoPorId(l.dispositivoId);
+      const atrasado = l.status === 'ativa' && l.dataFimPrevista < hoje;
+      const dias = Math.max(1, Math.ceil((new Date(l.dataFimPrevista) - new Date(l.dataInicio)) / (1000*60*60*24)));
+      const valorEst = l.valorTotal !== null ? formatarMoeda(l.valorTotal) : formatarMoeda(dias * l.valorDiaria);
+      return `<tr>
+        <td class="text-muted">#${l.id}</td>
+        <td><strong>${l.clienteNome}</strong><br><span class="text-muted text-sm">${l.clienteCPFCNPJ}</span></td>
+        <td>${disp ? disp.modelo : '—'}</td>
+        <td>${formatarData(l.dataInicio)}</td>
+        <td style="color:${atrasado?'var(--danger)':'inherit'}">${formatarData(l.dataFimPrevista)}${atrasado?' ⚠️':''}</td>
+        <td>${valorEst}</td>
+        <td>${statusLocacaoBadge(l.status)}</td>
+        <td>
+          <button class="btn-icon" onclick="verDetalhe(${l.id})" title="Detalhes">👁️</button>
+          ${l.status==='ativa' ? `<a class="btn-icon" href="devolucoes.html?id=${l.id}" title="Registrar devolução">↩️</a>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function preencherDispositivosSelect() {
+    const sel = document.getElementById('f-disp');
+    const disponiveis = getDispositivos().filter(d => d.status === 'disponivel');
+    sel.innerHTML = '<option value="">— Selecione um aparelho disponível —</option>' +
+      disponiveis.map(d => `<option value="${d.id}" data-diaria="${d.diaria}">${d.modelo} (${d.marca}) — ${formatarMoeda(d.diaria)}/dia</option>`).join('');
+  }
+
+  function atualizarPreview() {
+    const sel = document.getElementById('f-disp');
+    const opt = sel.options[sel.selectedIndex];
+    const diaria = opt ? parseFloat(opt.dataset.diaria) : 0;
+    const inicio = document.getElementById('f-inicio').value;
+    const fim = document.getElementById('f-fim').value;
+    const prev = document.getElementById('preview-valor');
+
+    if (diaria && inicio && fim) {
+      const val = calcularPreviewValor(inicio, fim, diaria);
+      if (val > 0) {
+        const dias = Math.max(1, Math.ceil((new Date(fim) - new Date(inicio)) / (1000*60*60*24)));
+        prev.textContent = `💰 Valor estimado: ${formatarMoeda(val)} (${dias} dia${dias>1?'s':''} × ${formatarMoeda(diaria)})`;
+        prev.style.display = 'block';
+        return;
+      }
+    }
+    prev.style.display = 'none';
+  }
+
+  function abrirModal() {
+    preencherDispositivosSelect();
+    document.getElementById('f-nome').value = '';
+    document.getElementById('f-doc').value = '';
+    document.getElementById('f-tel').value = '';
+    document.getElementById('f-obs').value = '';
+    document.getElementById('f-inicio').value = hojeISO();
+    document.getElementById('f-fim').value = '';
+    document.getElementById('preview-valor').style.display = 'none';
+    document.getElementById('modal-error').style.display = 'none';
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function fecharModal() { document.getElementById('modal').style.display = 'none'; }
+
+  function salvar() {
+    const nome = document.getElementById('f-nome').value.trim();
+    const doc = document.getElementById('f-doc').value.trim();
+    const tel = document.getElementById('f-tel').value.trim();
+    const dispId = parseInt(document.getElementById('f-disp').value);
+    const inicio = document.getElementById('f-inicio').value;
+    const fim = document.getElementById('f-fim').value;
+    const obs = document.getElementById('f-obs').value.trim();
+    const errEl = document.getElementById('modal-error');
+
+    if (!nome || !doc || !tel) { errEl.textContent = 'Preencha todos os dados do cliente.'; errEl.style.display='block'; return; }
+    if (!dispId) { errEl.textContent = 'Selecione um dispositivo.'; errEl.style.display='block'; return; }
+    if (!inicio || !fim) { errEl.textContent = 'Informe as datas de início e devolução.'; errEl.style.display='block'; return; }
+    if (fim <= inicio) { errEl.textContent = 'A data de devolução deve ser após a data de início.'; errEl.style.display='block'; return; }
+
+    const disp = getDispositivoPorId(dispId);
+    if (disp.status !== 'disponivel') { errEl.textContent = 'Este aparelho não está disponível para locação.'; errEl.style.display='block'; return; }
+
+    salvarLocacao({
+      clienteNome: nome,
+      clienteCPFCNPJ: doc,
+      clienteTelefone: tel,
+      dispositivoId: dispId,
+      dataInicio: inicio,
+      dataFimPrevista: fim,
+      dataFimReal: null,
+      status: 'ativa',
+      observacoes: obs,
+      valorDiaria: disp.diaria,
+      multaDano: 0,
+      valorTotal: null,
+      danos: ''
+    });
+
+    fecharModal();
+    renderTabela();
+    mostrarAlerta('Locação registrada com sucesso!', 'success');
+  }
+
+  function verDetalhe(id) {
+    const l = getLocacaoPorId(id);
+    const disp = getDispositivoPorId(l.dispositivoId);
+    document.getElementById('detalhe-body').innerHTML = `
+      <div class="grid-2" style="gap:12px;margin-bottom:16px">
+        <div><div class="text-muted text-sm">Cliente</div><div class="font-bold">${l.clienteNome}</div></div>
+        <div><div class="text-muted text-sm">CPF/CNPJ</div><div>${l.clienteCPFCNPJ}</div></div>
+        <div><div class="text-muted text-sm">Telefone</div><div>${l.clienteTelefone}</div></div>
+        <div><div class="text-muted text-sm">Dispositivo</div><div>${disp ? disp.modelo + ' ('+disp.marca+')' : '—'}</div></div>
+        <div><div class="text-muted text-sm">Início</div><div>${formatarData(l.dataInicio)}</div></div>
+        <div><div class="text-muted text-sm">Devolução prevista</div><div>${formatarData(l.dataFimPrevista)}</div></div>
+        <div><div class="text-muted text-sm">Devolução real</div><div>${formatarData(l.dataFimReal)}</div></div>
+        <div><div class="text-muted text-sm">Diária</div><div>${formatarMoeda(l.valorDiaria)}</div></div>
+        ${l.multaAtraso ? `<div><div class="text-muted text-sm">Multa de atraso</div><div style="color:var(--danger)">${formatarMoeda(l.multaAtraso)}</div></div>` : ''}
+        ${l.multaDano ? `<div><div class="text-muted text-sm">Multa de dano</div><div style="color:var(--danger)">${formatarMoeda(l.multaDano)}</div></div>` : ''}
+        ${l.valorTotal !== null ? `<div><div class="text-muted text-sm">Valor Total</div><div class="font-bold" style="color:var(--success)">${formatarMoeda(l.valorTotal)}</div></div>` : ''}
+        <div><div class="text-muted text-sm">Status</div><div>${statusLocacaoBadge(l.status)}</div></div>
+      </div>
+      ${l.observacoes ? `<div class="form-group"><label>Observações</label><div style="color:var(--text-muted)">${l.observacoes}</div></div>` : ''}
+      ${l.danos ? `<div class="alert alert-error">⚠️ Danos: ${l.danos}</div>` : ''}
+    `;
+    document.getElementById('modal-detalhe').style.display = 'flex';
+  }
+
+  function fecharDetalhe() { document.getElementById('modal-detalhe').style.display = 'none'; }
+
+  function mostrarAlerta(msg, tipo) {
+    const el = document.getElementById('alert-box');
+    el.innerHTML = `<div class="alert alert-${tipo==='error'?'error':'success'}">${msg}</div>`;
+    setTimeout(() => el.innerHTML = '', 3500);
+  }
+
+  renderTabela();
+</script>
+</body>
+</html>
